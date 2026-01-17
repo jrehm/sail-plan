@@ -371,6 +371,26 @@ st.markdown("""
         margin: 1rem 0;
         text-align: center;
     }
+
+    /* Pending changes indicator */
+    .pending-changes {
+        background-color: #fff3cd;
+        border: 2px solid #ffc107;
+        color: #856404;
+        padding: 0.75rem;
+        border-radius: 8px;
+        margin: 0.5rem 0;
+        text-align: center;
+        font-weight: bold;
+    }
+
+    /* Committed state display */
+    .committed-state {
+        font-size: 0.9rem;
+        color: #666;
+        text-align: center;
+        margin-bottom: 0.5rem;
+    }
     
     /* Responsive adjustments for tablets landscape */
     @media (min-width: 768px) {
@@ -393,20 +413,54 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state
-if "initialized" not in st.session_state:
-    current_config = get_current_sail_config()
-    st.session_state.main = current_config["main"]
-    st.session_state.headsail = current_config["headsail"]
-    st.session_state.downwind = current_config["downwind"]
-    st.session_state.staysail_mode = current_config["staysail_mode"]
-    st.session_state.initialized = True
+# Always fetch current committed state from InfluxDB (ensures multi-user consistency)
+committed_config = get_current_sail_config()
+
+# Initialize or sync session state with committed state
+# Only sync if user hasn't made pending changes
+if "has_pending_changes" not in st.session_state:
+    st.session_state.has_pending_changes = False
+
+if not st.session_state.has_pending_changes:
+    # Sync UI state with database
+    st.session_state.main = committed_config["main"]
+    st.session_state.headsail = committed_config["headsail"]
+    st.session_state.downwind = committed_config["downwind"]
+    st.session_state.staysail_mode = committed_config["staysail_mode"]
+
+
+def has_changes() -> bool:
+    """Check if current selections differ from committed state."""
+    return (
+        st.session_state.main != committed_config["main"]
+        or st.session_state.headsail != committed_config["headsail"]
+        or st.session_state.downwind != committed_config["downwind"]
+        or st.session_state.staysail_mode != committed_config["staysail_mode"]
+    )
+
+
+def mark_pending():
+    """Mark that user has made uncommitted changes."""
+    st.session_state.has_pending_changes = True
+
+
+def clear_pending():
+    """Clear pending changes flag after successful save."""
+    st.session_state.has_pending_changes = False
+
 
 # Header with current time (in boat's local timezone)
 st.markdown("# ⛵ MORTICIA")
 boat_tz = get_boat_timezone()
 current_time = format_local_time(datetime.now(timezone.utc), boat_tz)
 st.markdown(f'<div class="time-display">{current_time}</div>', unsafe_allow_html=True)
+
+# Show pending changes warning if user has unsaved modifications
+if has_changes():
+    st.markdown(
+        '<div class="pending-changes">⚠️ You have unsaved changes</div>',
+        unsafe_allow_html=True,
+    )
 
 # ALL DOWN button
 st.markdown('<div class="all-down-btn">', unsafe_allow_html=True)
@@ -415,6 +469,7 @@ if st.button("⚓ ALL DOWN", key="all_down", use_container_width=True):
     st.session_state.headsail = ""
     st.session_state.downwind = ""
     st.session_state.staysail_mode = False
+    mark_pending()
     st.rerun()
 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -432,6 +487,7 @@ for i, option in enumerate(main_options):
         if st.button(btn_label, key=f"main_{option}", use_container_width=True,
                      type="primary" if is_active else "secondary"):
             st.session_state.main = option
+            mark_pending()
             st.rerun()
 
 # Main DOWN button (full width)
@@ -440,6 +496,7 @@ down_label = f"{'✓ ' if is_down else ''}⬇ DOWN"
 if st.button(down_label, key="main_down", use_container_width=True,
              type="primary" if is_down else "secondary"):
     st.session_state.main = "DOWN"
+    mark_pending()
     st.rerun()
 
 st.markdown("---")
@@ -464,6 +521,7 @@ for i, sail in enumerate(HEADSAILS):
                 # Clear staysail mode unless it's JIB with Reaching Spi
                 if sail != "JIB" or st.session_state.downwind != "REACHING_SPI":
                     st.session_state.staysail_mode = False
+            mark_pending()
             st.rerun()
 
 # Staysail mode checkbox (only enabled when JIB + REACHING_SPI)
@@ -471,11 +529,12 @@ can_staysail = (st.session_state.headsail == "JIB" and
                 st.session_state.downwind == "REACHING_SPI")
 
 if can_staysail:
-    staysail = st.checkbox("☑ Jib as Staysail with Reaching Spi", 
+    staysail = st.checkbox("☑ Jib as Staysail with Reaching Spi",
                            value=st.session_state.staysail_mode,
                            key="staysail_check")
     if staysail != st.session_state.staysail_mode:
         st.session_state.staysail_mode = staysail
+        mark_pending()
         st.rerun()
 else:
     st.markdown('<p style="color: #999; font-size: 0.9rem;">Staysail mode: Select Jib + Reaching Spi</p>', 
@@ -506,6 +565,7 @@ for sail in DOWNWIND_SAILS:
                 st.session_state.staysail_mode = False
             elif st.session_state.headsail not in ["JIB", ""]:
                 st.session_state.headsail = ""
+        mark_pending()
         st.rerun()
 
 st.markdown("---")
@@ -513,26 +573,49 @@ st.markdown("---")
 # Current configuration summary
 st.markdown('<div class="section-header">CURRENT CONFIG</div>', unsafe_allow_html=True)
 
-config_parts = []
-if st.session_state.main != "DOWN":
-    config_parts.append(f"Main: {st.session_state.main}")
-else:
-    config_parts.append("Main: DOWN")
 
-if st.session_state.headsail:
-    sail_name = SAIL_DISPLAY.get(st.session_state.headsail, st.session_state.headsail)
-    if st.session_state.staysail_mode:
-        sail_name += " (staysail)"
-    config_parts.append(sail_name)
+def format_config_summary(main: str, headsail: str, downwind: str, staysail_mode: bool) -> str:
+    """Format sail configuration as a readable summary string."""
+    parts = []
+    if main != "DOWN":
+        parts.append(f"Main: {main}")
+    else:
+        parts.append("Main: DOWN")
 
-if st.session_state.downwind:
-    config_parts.append(SAIL_DISPLAY.get(st.session_state.downwind, st.session_state.downwind))
+    if headsail:
+        sail_name = SAIL_DISPLAY.get(headsail, headsail)
+        if staysail_mode:
+            sail_name += " (staysail)"
+        parts.append(sail_name)
 
-if not st.session_state.headsail and not st.session_state.downwind and st.session_state.main == "DOWN":
-    config_summary = "⚓ All sails down"
-else:
-    config_summary = " + ".join(config_parts)
+    if downwind:
+        parts.append(SAIL_DISPLAY.get(downwind, downwind))
 
+    if not headsail and not downwind and main == "DOWN":
+        return "⚓ All sails down"
+    return " + ".join(parts)
+
+
+# Show committed state from database if there are pending changes
+if has_changes():
+    committed_summary = format_config_summary(
+        committed_config["main"],
+        committed_config["headsail"],
+        committed_config["downwind"],
+        committed_config["staysail_mode"],
+    )
+    st.markdown(
+        f'<div class="committed-state">📋 Current in database: {committed_summary}</div>',
+        unsafe_allow_html=True,
+    )
+
+# Show selected configuration
+config_summary = format_config_summary(
+    st.session_state.main,
+    st.session_state.headsail,
+    st.session_state.downwind,
+    st.session_state.staysail_mode,
+)
 st.markdown(f'<div class="status-summary">{config_summary}</div>', unsafe_allow_html=True)
 
 st.markdown("---")
@@ -573,6 +656,7 @@ if st.button("💾 UPDATE SAIL PLAN", key="update", use_container_width=True):
         timestamp=entry_time
     )
     if success:
+        clear_pending()
         st.success("✅ Sail plan updated!")
         st.balloons()
     else:
