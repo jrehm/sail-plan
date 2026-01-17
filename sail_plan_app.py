@@ -10,7 +10,7 @@ OpenPlotter/Signal K/Grafana monitoring stacks.
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time as dt_time, timedelta, timezone
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
@@ -99,19 +99,17 @@ def get_boat_timezone() -> ZoneInfo:
 
 def format_local_time(dt: datetime, tz: ZoneInfo) -> str:
     """
-    Format a datetime in the given timezone with zone abbreviation.
+    Format a datetime in the given timezone (HH:MM only for compact display).
 
     Args:
         dt: Datetime to format (should be timezone-aware).
         tz: Target timezone.
 
     Returns:
-        Formatted time string like "14:32:15 CDT".
+        Formatted time string like "14:32".
     """
     local_dt = dt.astimezone(tz)
-    # Get timezone abbreviation (e.g., CDT, EST, UTC)
-    tz_abbrev = local_dt.strftime("%Z")
-    return local_dt.strftime(f"%H:%M:%S {tz_abbrev}")
+    return local_dt.strftime("%H:%M")
 
 
 def format_local_datetime(dt: datetime, tz: ZoneInfo) -> str:
@@ -135,14 +133,20 @@ MAIN_STATES = ["DOWN", "FULL", "R1", "R2", "R3", "R4"]
 HEADSAILS = ["JIB", "J1", "STORM"]
 DOWNWIND_SAILS = ["BIGGEE", "REACHING_SPI", "WHOMPER"]
 
-# Display names for sails
+# Display names for sails (short versions for buttons)
 SAIL_DISPLAY = {
-    "BIGGEE": "Biggee (Code 0)",
-    "REACHING_SPI": "Reaching Spi",
-    "WHOMPER": "Whomper",
+    "DOWN": "DN",
+    "FULL": "FULL",
+    "R1": "R1",
+    "R2": "R2",
+    "R3": "R3",
+    "R4": "R4",
+    "BIGGEE": "Biggee",
+    "REACHING_SPI": "R.Spi",
+    "WHOMPER": "Whomp",
     "JIB": "Jib",
     "J1": "J1",
-    "STORM": "Storm Jib",
+    "STORM": "Storm",
 }
 
 
@@ -151,9 +155,11 @@ def get_influx_client() -> InfluxDBClient:
     return InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG)
 
 
+@st.cache_data(ttl=30)
 def get_current_sail_config() -> dict[str, str | bool]:
     """
     Fetch the most recent sail configuration from InfluxDB.
+    Cached for 30 seconds to reduce database queries.
 
     Returns:
         Dictionary containing main, headsail, downwind, staysail_mode, and comment.
@@ -161,7 +167,7 @@ def get_current_sail_config() -> dict[str, str | bool]:
     """
     client = get_influx_client()
     query_api = client.query_api()
-    
+
     query = f'''
     from(bucket: "{INFLUX_BUCKET}")
         |> range(start: -30d)
@@ -171,11 +177,12 @@ def get_current_sail_config() -> dict[str, str | bool]:
         |> sort(columns: ["_time"], desc: true)
         |> limit(n: 1)
     '''
-    
+
     try:
         tables = query_api.query(query)
         for table in tables:
             for record in table.records:
+                client.close()
                 return {
                     "main": record.values.get("main", "DOWN"),
                     "headsail": record.values.get("headsail", ""),
@@ -185,7 +192,7 @@ def get_current_sail_config() -> dict[str, str | bool]:
                 }
     except Exception as e:
         st.error(f"Error reading from InfluxDB: {e}")
-    
+
     client.close()
     return {"main": "DOWN", "headsail": "", "downwind": "", "staysail_mode": False, "comment": ""}
 
@@ -214,10 +221,10 @@ def write_sail_config(
     """
     client = get_influx_client()
     write_api = client.write_api(write_options=SYNCHRONOUS)
-    
+
     if timestamp is None:
         timestamp = datetime.now(timezone.utc)
-    
+
     point = (
         Point("sail_config")
         .tag("vessel", "morticia")
@@ -228,7 +235,7 @@ def write_sail_config(
         .field("comment", comment)
         .time(timestamp, WritePrecision.S)
     )
-    
+
     try:
         write_api.write(bucket=INFLUX_BUCKET, record=point)
         client.close()
@@ -239,9 +246,11 @@ def write_sail_config(
         return False
 
 
+@st.cache_data(ttl=60)
 def get_recent_entries(limit: int = 10) -> list[dict]:
     """
     Fetch recent sail log entries from the past 7 days.
+    Cached for 60 seconds to reduce database queries.
 
     Args:
         limit: Maximum number of entries to return.
@@ -252,7 +261,7 @@ def get_recent_entries(limit: int = 10) -> list[dict]:
     """
     client = get_influx_client()
     query_api = client.query_api()
-    
+
     query = f'''
     from(bucket: "{INFLUX_BUCKET}")
         |> range(start: -7d)
@@ -262,7 +271,7 @@ def get_recent_entries(limit: int = 10) -> list[dict]:
         |> sort(columns: ["_time"], desc: true)
         |> limit(n: {limit})
     '''
-    
+
     entries = []
     try:
         tables = query_api.query(query)
@@ -278,7 +287,7 @@ def get_recent_entries(limit: int = 10) -> list[dict]:
                 })
     except Exception as e:
         st.error(f"Error reading history: {e}")
-    
+
     client.close()
     return entries
 
@@ -324,141 +333,263 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# Custom CSS for large touch targets and responsive design
+# Compact mobile-first CSS
 st.markdown("""
 <style>
-    /* Base responsive settings */
+    /* Hide Streamlit chrome but keep sidebar toggle */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    /* Keep header visible for sidebar hamburger menu */
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+        height: auto !important;
+    }
+
+    /* Compact container with bottom padding for iOS dock */
     .main .block-container {
-        padding: 1rem;
+        padding: 0.5rem 0.5rem 5rem 0.5rem;
         max-width: 100%;
     }
-    
-    /* Large touch-friendly buttons */
-    .stButton > button {
-        width: 100%;
-        min-height: 60px;
-        font-size: 1.2rem;
-        font-weight: bold;
-        border-radius: 12px;
-        margin: 4px 0;
+
+    /* Remove default streamlit spacing */
+    .stVerticalBlock > div {
+        gap: 0.25rem;
+    }
+
+    /* Prevent horizontal scroll on entire page */
+    .main, .main .block-container, [data-testid="stAppViewContainer"] {
+        max-width: 100vw !important;
+        overflow-x: hidden !important;
+    }
+
+    /* Style pills for touch-friendly mobile use */
+    [data-testid="stPills"] {
+        gap: 10px !important;
+    }
+    [data-testid="stPills"] button {
+        min-height: 68px !important;
+        padding: 0.8rem 1.4rem !important;
+        font-size: 1.75rem !important;
+        font-weight: bold !important;
+        border-radius: 12px !important;
         touch-action: manipulation;
     }
-    
-    /* Active sail state - green */
-    .stButton > button[data-active="true"] {
-        background-color: #28a745 !important;
-        color: white !important;
-        border: 3px solid #1e7e34 !important;
+    /* Pills container should wrap on mobile */
+    [data-testid="stPills"] > div {
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+        gap: 10px !important;
     }
-    
-    /* Inactive sail state - grey */
-    .stButton > button[data-active="false"] {
-        background-color: #6c757d !important;
-        color: white !important;
-        border: 2px solid #545b62 !important;
+
+    /* Bottom bar columns - keep side by side */
+    [data-testid="stHorizontalBlock"] {
+        flex-wrap: nowrap !important;
+        gap: 8px !important;
     }
-    
-    /* All Down button - red/orange */
-    .all-down-btn > button {
-        background-color: #dc3545 !important;
-        color: white !important;
-        min-height: 70px;
+    [data-testid="column"] {
+        min-width: 0 !important;
+    }
+
+    /* Sticky header container - positioned below Streamlit header */
+    .sticky-header {
+        position: sticky;
+        top: 0;
+        z-index: 99;
+        background: white;
+        padding: 0.25rem 0;
+        margin-bottom: 0.25rem;
+    }
+
+    /* Compact header */
+    .compact-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.4rem 0.75rem;
+        background: #1a1a2e;
+        color: white;
+        border-radius: 10px;
+        margin-bottom: 0.4rem;
+    }
+    .compact-header .title {
         font-size: 1.4rem;
+        font-weight: bold;
     }
-    
-    /* Update button - blue, extra large */
-    .update-btn > button {
+    .compact-header .time {
+        font-size: 1.2rem;
+        color: #ccc;
+    }
+
+    /* Current state banner */
+    .state-banner {
+        font-size: 1.3rem;
+        font-weight: bold;
+        text-align: center;
+        padding: 0.6rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        margin-bottom: 0.4rem;
+    }
+
+    /* Section labels */
+    .section-label {
+        font-size: 1.65rem;
+        font-weight: bold;
+        color: #666;
+        margin: 0.7rem 0 0.35rem 0;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    /* Touch-friendly buttons */
+    .stButton > button {
+        width: 100%;
+        min-height: 56px;
+        font-size: 1.2rem;
+        font-weight: bold;
+        border-radius: 10px;
+        touch-action: manipulation;
+    }
+
+    /* Primary button (UPDATE) - blue */
+    .stButton > button[kind="primary"] {
         background-color: #007bff !important;
         color: white !important;
-        min-height: 80px;
-        font-size: 1.5rem;
+        border: 2px solid #0056b3 !important;
     }
-    
-    /* Section headers */
-    .section-header {
-        font-size: 1.1rem;
-        font-weight: bold;
-        color: #333;
-        margin: 1rem 0 0.5rem 0;
-        padding-bottom: 0.3rem;
-        border-bottom: 2px solid #ddd;
+
+    /* Popover trigger button styling */
+    .stPopover > div > button {
+        min-height: 52px !important;
+        font-size: 1.1rem !important;
+        font-weight: bold !important;
+        border-radius: 10px !important;
     }
-    
-    /* Current time display */
-    .time-display {
-        font-size: 1.5rem;
-        font-weight: bold;
-        text-align: center;
-        padding: 0.5rem;
-        background-color: #f8f9fa;
-        border-radius: 8px;
-        margin-bottom: 1rem;
+
+    /* Checkboxes - compact */
+    .stCheckbox {
+        padding: 0 !important;
     }
-    
-    /* Status summary */
-    .status-summary {
-        font-size: 1.2rem;
-        padding: 1rem;
-        background-color: #e9ecef;
-        border-radius: 8px;
-        margin: 1rem 0;
-        text-align: center;
+    .stCheckbox label {
+        font-size: 0.85rem !important;
+    }
+
+    /* Date/time inputs - compact */
+    .stDateInput, .stTimeInput {
+        margin-bottom: 0.25rem !important;
+    }
+    .stDateInput input, .stTimeInput input {
+        padding: 0.4rem !important;
+        font-size: 0.95rem !important;
     }
 
     /* Pending changes indicator */
-    .pending-changes {
+    .pending-indicator {
         background-color: #fff3cd;
-        border: 2px solid #ffc107;
         color: #856404;
-        padding: 0.75rem;
-        border-radius: 8px;
-        margin: 0.5rem 0;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.8rem;
         text-align: center;
-        font-weight: bold;
     }
 
-    /* Committed state display */
-    .committed-state {
-        font-size: 0.9rem;
-        color: #666;
-        text-align: center;
-        margin-bottom: 0.5rem;
+    /* Sidebar styling - compact history with scroll */
+    [data-testid="stSidebar"] > div:first-child {
+        overflow-y: auto !important;
+        max-height: 100vh !important;
+    }
+    .sidebar .sidebar-content {
+        padding: 0.5rem;
+    }
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
+        gap: 2px !important;
+        flex-wrap: nowrap !important;
+        align-items: center !important;
+        margin-bottom: 0.15rem;
+    }
+    [data-testid="stSidebar"] [data-testid="column"] {
+        padding: 0 !important;
+    }
+    [data-testid="stSidebar"] .stButton > button {
+        min-height: 28px !important;
+        min-width: 28px !important;
+        padding: 0.1rem 0.4rem !important;
+        font-size: 0.85rem !important;
+    }
+    [data-testid="stSidebar"] small {
+        line-height: 1.2;
+        display: block;
+    }
+    /* History row styling */
+    .history-row {
+        padding: 4px 6px;
+        border-radius: 4px;
     }
 
-    /* Delete confirmation styling */
-    .confirm-delete {
-        background-color: #dc3545 !important;
-        color: white !important;
+    /* Popover styling - position higher for mobile keyboard */
+    .stPopover {
+        width: 100%;
     }
-    
-    /* Responsive adjustments for tablets landscape */
-    @media (min-width: 768px) {
-        .stButton > button {
-            min-height: 70px;
-            font-size: 1.3rem;
+    .stPopover > div > button {
+        width: 100%;
+    }
+    [data-testid="stPopover"] > div > div {
+        top: 10vh !important;
+        bottom: auto !important;
+        max-height: 40vh !important;
+    }
+    [data-testid="stPopover"] textarea {
+        font-size: 16px !important; /* Prevents iOS zoom on focus */
+    }
+
+    /* Ensure border-box sizing */
+    *, *::before, *::after {
+        box-sizing: border-box;
+    }
+
+    /* Mobile optimizations - keep things readable */
+    @media (max-width: 500px) {
+        .main .block-container {
+            padding: 0.4rem 0.4rem 5rem 0.4rem;
         }
-    }
-    
-    /* Phone portrait - stack everything */
-    @media (max-width: 480px) {
-        .stButton > button {
-            min-height: 55px;
+        .state-banner {
+            font-size: 1.15rem;
+            padding: 0.5rem;
+        }
+        .compact-header .title {
+            font-size: 1.25rem;
+        }
+        .compact-header .time {
             font-size: 1.1rem;
         }
-        .main .block-container {
-            padding: 0.5rem;
+        .section-label {
+            font-size: 1.5rem;
+            margin: 0.6rem 0 0.3rem 0;
+        }
+        /* Pills stay readable on mobile */
+        [data-testid="stPills"] button {
+            min-height: 62px !important;
+            padding: 0.7rem 1.1rem !important;
+            font-size: 1.6rem !important;
         }
     }
 </style>
 """, unsafe_allow_html=True)
 
+# Get timezone
+boat_tz = get_boat_timezone()
+current_time = format_local_time(datetime.now(timezone.utc), boat_tz)
+
 # Always fetch current committed state from InfluxDB (ensures multi-user consistency)
 committed_config = get_current_sail_config()
 
 # Initialize or sync session state with committed state
-# Only sync if user hasn't made pending changes
 if "has_pending_changes" not in st.session_state:
     st.session_state.has_pending_changes = False
+
+if "pending_comment" not in st.session_state:
+    st.session_state.pending_comment = ""
 
 if not st.session_state.has_pending_changes:
     # Sync UI state with database
@@ -486,235 +617,50 @@ def mark_pending():
 def clear_pending():
     """Clear pending changes flag after successful save."""
     st.session_state.has_pending_changes = False
-
-
-# Header with current time (in boat's local timezone)
-st.markdown("# ⛵ MORTICIA")
-boat_tz = get_boat_timezone()
-current_time = format_local_time(datetime.now(timezone.utc), boat_tz)
-st.markdown(f'<div class="time-display">{current_time}</div>', unsafe_allow_html=True)
-
-# Show pending changes warning if user has unsaved modifications
-if has_changes():
-    st.markdown(
-        '<div class="pending-changes">⚠️ You have unsaved changes</div>',
-        unsafe_allow_html=True,
-    )
-
-# ALL DOWN button
-st.markdown('<div class="all-down-btn">', unsafe_allow_html=True)
-if st.button("⚓ ALL DOWN", key="all_down", use_container_width=True):
-    st.session_state.main = "DOWN"
-    st.session_state.headsail = ""
-    st.session_state.downwind = ""
-    st.session_state.staysail_mode = False
-    mark_pending()
-    st.rerun()
-st.markdown('</div>', unsafe_allow_html=True)
-
-st.markdown("---")
-
-# MAIN SAIL section
-st.markdown('<div class="section-header">MAIN</div>', unsafe_allow_html=True)
-
-main_cols = st.columns(5)
-main_options = ["FULL", "R1", "R2", "R3", "R4"]
-for i, option in enumerate(main_options):
-    with main_cols[i]:
-        is_active = st.session_state.main == option
-        btn_label = f"{'✓ ' if is_active else ''}{option}"
-        if st.button(btn_label, key=f"main_{option}", use_container_width=True,
-                     type="primary" if is_active else "secondary"):
-            st.session_state.main = option
-            mark_pending()
-            st.rerun()
-
-# Main DOWN button (full width)
-is_down = st.session_state.main == "DOWN"
-down_label = f"{'✓ ' if is_down else ''}⬇ DOWN"
-if st.button(down_label, key="main_down", use_container_width=True,
-             type="primary" if is_down else "secondary"):
-    st.session_state.main = "DOWN"
-    mark_pending()
-    st.rerun()
-
-st.markdown("---")
-
-# HEADSAIL section
-st.markdown('<div class="section-header">HEADSAIL</div>', unsafe_allow_html=True)
-
-head_cols = st.columns(3)
-for i, sail in enumerate(HEADSAILS):
-    with head_cols[i]:
-        is_active = st.session_state.headsail == sail
-        btn_label = f"{'✓ ' if is_active else ''}{SAIL_DISPLAY.get(sail, sail)}"
-        if st.button(btn_label, key=f"head_{sail}", use_container_width=True,
-                     type="primary" if is_active else "secondary"):
-            if is_active:
-                # Deselect if already selected
-                st.session_state.headsail = ""
-                st.session_state.staysail_mode = False
-            else:
-                # Select this headsail (mutual exclusivity)
-                st.session_state.headsail = sail
-                # Clear staysail mode unless it's JIB with Reaching Spi
-                if sail != "JIB" or st.session_state.downwind != "REACHING_SPI":
-                    st.session_state.staysail_mode = False
-            mark_pending()
-            st.rerun()
-
-# Staysail mode checkbox (only enabled when JIB + REACHING_SPI)
-can_staysail = (st.session_state.headsail == "JIB" and 
-                st.session_state.downwind == "REACHING_SPI")
-
-if can_staysail:
-    staysail = st.checkbox("☑ Jib as Staysail with Reaching Spi",
-                           value=st.session_state.staysail_mode,
-                           key="staysail_check")
-    if staysail != st.session_state.staysail_mode:
-        st.session_state.staysail_mode = staysail
-        mark_pending()
-        st.rerun()
-else:
-    st.markdown('<p style="color: #999; font-size: 0.9rem;">Staysail mode: Select Jib + Reaching Spi</p>', 
-                unsafe_allow_html=True)
-    if st.session_state.staysail_mode:
-        st.session_state.staysail_mode = False
-
-st.markdown("---")
-
-# DOWNWIND section
-st.markdown('<div class="section-header">DOWNWIND</div>', unsafe_allow_html=True)
-
-for sail in DOWNWIND_SAILS:
-    is_active = st.session_state.downwind == sail
-    btn_label = f"{'✓ ' if is_active else ''}{SAIL_DISPLAY.get(sail, sail)}"
-    if st.button(btn_label, key=f"down_{sail}", use_container_width=True,
-                 type="primary" if is_active else "secondary"):
-        if is_active:
-            # Deselect if already selected
-            st.session_state.downwind = ""
-            st.session_state.staysail_mode = False
-        else:
-            # Select this downwind sail (mutual exclusivity)
-            st.session_state.downwind = sail
-            # Clear headsail unless it's JIB with Reaching Spi (staysail mode)
-            if sail != "REACHING_SPI":
-                st.session_state.headsail = ""
-                st.session_state.staysail_mode = False
-            elif st.session_state.headsail not in ["JIB", ""]:
-                st.session_state.headsail = ""
-        mark_pending()
-        st.rerun()
-
-st.markdown("---")
-
-# Current configuration summary
-st.markdown('<div class="section-header">CURRENT CONFIG</div>', unsafe_allow_html=True)
+    st.session_state.pending_comment = ""
 
 
 def format_config_summary(main: str, headsail: str, downwind: str, staysail_mode: bool) -> str:
     """Format sail configuration as a readable summary string."""
     parts = []
-    if main != "DOWN":
-        parts.append(f"Main: {main}")
-    else:
-        parts.append("Main: DOWN")
 
+    # Main sail
+    if main == "DOWN":
+        parts.append("Main: DOWN")
+    else:
+        parts.append(f"Main: {main}")
+
+    # Headsail
     if headsail:
         sail_name = SAIL_DISPLAY.get(headsail, headsail)
         if staysail_mode:
-            sail_name += " (staysail)"
+            sail_name += " (S)"
         parts.append(sail_name)
 
+    # Downwind
     if downwind:
         parts.append(SAIL_DISPLAY.get(downwind, downwind))
 
     if not headsail and not downwind and main == "DOWN":
-        return "⚓ All sails down"
+        return "All sails down"
+
     return " + ".join(parts)
 
 
-# Show committed state from database if there are pending changes
-if has_changes():
-    committed_summary = format_config_summary(
-        committed_config["main"],
-        committed_config["headsail"],
-        committed_config["downwind"],
-        committed_config["staysail_mode"],
-    )
-    st.markdown(
-        f'<div class="committed-state">📋 Current in database: {committed_summary}</div>',
-        unsafe_allow_html=True,
-    )
+# ============ SIDEBAR (History) ============
+with st.sidebar:
+    st.markdown("### History")
 
-# Show selected configuration
-config_summary = format_config_summary(
-    st.session_state.main,
-    st.session_state.headsail,
-    st.session_state.downwind,
-    st.session_state.staysail_mode,
-)
-st.markdown(f'<div class="status-summary">{config_summary}</div>', unsafe_allow_html=True)
+    if "pending_delete" not in st.session_state:
+        st.session_state.pending_delete = None
 
-st.markdown("---")
-
-# Optional fields
-st.markdown('<div class="section-header">LOG ENTRY OPTIONS</div>', unsafe_allow_html=True)
-
-# Backdate option (in boat's local timezone)
-use_backdate = st.checkbox("📅 Backdate this entry", key="use_backdate")
-entry_time = None
-if use_backdate:
-    local_now = datetime.now(timezone.utc).astimezone(boat_tz)
-    tz_abbrev = local_now.strftime("%Z")
-    col1, col2 = st.columns(2)
-    with col1:
-        entry_date = st.date_input("Date", value=local_now.date(), key="entry_date")
-    with col2:
-        entry_time_input = st.time_input(f"Time ({tz_abbrev})", value=local_now.time(), key="entry_time")
-    # Combine and convert local time to UTC for storage
-    local_dt = datetime.combine(entry_date, entry_time_input).replace(tzinfo=boat_tz)
-    entry_time = local_dt.astimezone(timezone.utc)
-
-# Comment field
-comment = st.text_area("💬 Comment (optional)", height=80, key="comment",
-                       placeholder="Sail change notes, conditions, etc...")
-
-st.markdown("---")
-
-# UPDATE button
-st.markdown('<div class="update-btn">', unsafe_allow_html=True)
-if st.button("💾 UPDATE SAIL PLAN", key="update", use_container_width=True):
-    success = write_sail_config(
-        main=st.session_state.main,
-        headsail=st.session_state.headsail,
-        downwind=st.session_state.downwind,
-        staysail_mode=st.session_state.staysail_mode,
-        comment=comment,
-        timestamp=entry_time
-    )
-    if success:
-        clear_pending()
-        st.success("✅ Sail plan updated!")
-        st.balloons()
-    else:
-        st.error("❌ Failed to update sail plan")
-st.markdown('</div>', unsafe_allow_html=True)
-
-# Recent history (collapsible)
-with st.expander("📜 Recent Sail Changes"):
-    entries = get_recent_entries(10)
+    entries = get_recent_entries(50)
     if entries:
-        # Track which entry is pending delete confirmation
-        if "pending_delete" not in st.session_state:
-            st.session_state.pending_delete = None
-
         for i, entry in enumerate(entries):
             time_str = format_local_datetime(entry["time"], boat_tz)
             parts = []
             if entry["main"]:
-                parts.append(f"Main:{entry['main']}")
+                parts.append(f"M:{entry['main']}")
             if entry["headsail"]:
                 h = SAIL_DISPLAY.get(entry["headsail"], entry["headsail"])
                 if entry["staysail_mode"]:
@@ -724,33 +670,201 @@ with st.expander("📜 Recent Sail Changes"):
                 parts.append(SAIL_DISPLAY.get(entry["downwind"], entry["downwind"]))
 
             config = " + ".join(parts) if parts else "All down"
-            comment_str = f' - "{entry["comment"]}"' if entry["comment"] else ""
-
-            # Use columns for entry text and delete button
             entry_key = entry["time"].isoformat()
             is_pending = st.session_state.pending_delete == entry_key
 
+            # Alternate row shading (stronger contrast)
+            bg_color = "#d0d0d0" if i % 2 == 0 else "#f8f8f8"
+
             if is_pending:
-                # Show confirm/cancel row
-                col1, col2, col3 = st.columns([4, 1, 1])
-                with col1:
-                    st.markdown(f"⚠️ **Delete this entry?**")
-                with col2:
-                    if st.button("✓ Yes", key=f"confirm_{i}", type="primary"):
+                # Compact confirmation row
+                st.markdown(f'<div style="background:{bg_color};padding:4px;border-radius:4px;">', unsafe_allow_html=True)
+                cols = st.columns([3, 1, 1])
+                with cols[0]:
+                    st.markdown("<small>Delete?</small>", unsafe_allow_html=True)
+                with cols[1]:
+                    if st.button("✓", key=f"confirm_{i}", help="Confirm delete"):
                         if delete_sail_entry(entry["time"]):
                             st.session_state.pending_delete = None
+                            get_recent_entries.clear()
                             st.rerun()
-                with col3:
-                    if st.button("✗ No", key=f"cancel_{i}"):
+                with cols[2]:
+                    if st.button("✗", key=f"cancel_{i}", help="Cancel"):
                         st.session_state.pending_delete = None
                         st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
             else:
-                col1, col2 = st.columns([5, 1])
-                with col1:
-                    st.markdown(f"**{time_str}**: {config}{comment_str}")
-                with col2:
-                    if st.button("🗑️", key=f"delete_{i}", help="Delete entry"):
+                # Compact entry row with inline delete
+                comment_text = f' <i>"{entry["comment"]}"</i>' if entry["comment"] else ""
+                cols = st.columns([5, 1])
+                with cols[0]:
+                    st.markdown(
+                        f'<div class="history-row" style="background:{bg_color};">'
+                        f'<small><b>{time_str}</b><br/>{config}{comment_text}</small>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
+                with cols[1]:
+                    if st.button("🗑", key=f"delete_{i}", help="Delete entry"):
                         st.session_state.pending_delete = entry_key
                         st.rerun()
     else:
         st.markdown("*No recent entries*")
+
+
+# ============ MAIN CONTENT ============
+
+# Build pending indicator HTML if needed
+pending_html = ""
+if has_changes():
+    pending_html = '<div class="pending-indicator">Unsaved changes</div>'
+
+# Current state summary
+config_summary = format_config_summary(
+    st.session_state.main,
+    st.session_state.headsail,
+    st.session_state.downwind,
+    st.session_state.staysail_mode,
+)
+
+# Sticky header containing: title/time, state banner, pending indicator
+st.markdown(f'''
+<div class="sticky-header">
+    <div class="compact-header">
+        <span class="title">MORTICIA</span>
+        <span class="time">{current_time}</span>
+    </div>
+    <div class="state-banner">{config_summary}</div>
+    {pending_html}
+</div>
+''', unsafe_allow_html=True)
+
+# ============ SAIL SELECTION (Fragment for fast updates) ============
+@st.fragment
+def sail_selector():
+    """Fragment for sail selection - enables partial reruns for faster response."""
+    # Main sail
+    st.markdown('<div class="section-label">MAIN</div>', unsafe_allow_html=True)
+    main_options = {opt: SAIL_DISPLAY.get(opt, opt) for opt in MAIN_STATES}
+    main_selection = st.pills(
+        "Main sail",
+        options=list(main_options.keys()),
+        format_func=lambda x: main_options[x],
+        default=st.session_state.main,
+        key="main_pills",
+        label_visibility="collapsed",
+    )
+    if main_selection and main_selection != st.session_state.main:
+        st.session_state.main = main_selection
+        mark_pending()
+
+    # Headsail
+    st.markdown('<div class="section-label">HEADSAIL</div>', unsafe_allow_html=True)
+    headsail_options = {sail: SAIL_DISPLAY.get(sail, sail) for sail in HEADSAILS}
+    headsail_selection = st.pills(
+        "Headsail",
+        options=list(headsail_options.keys()),
+        format_func=lambda x: headsail_options[x],
+        default=st.session_state.headsail if st.session_state.headsail else None,
+        key="headsail_pills",
+        label_visibility="collapsed",
+    )
+    new_headsail = headsail_selection if headsail_selection else ""
+    if new_headsail != st.session_state.headsail:
+        st.session_state.headsail = new_headsail
+        if new_headsail != "JIB" or st.session_state.downwind != "REACHING_SPI":
+            st.session_state.staysail_mode = False
+        mark_pending()
+
+    # Downwind
+    st.markdown('<div class="section-label">DOWNWIND</div>', unsafe_allow_html=True)
+    downwind_options = {sail: SAIL_DISPLAY.get(sail, sail) for sail in DOWNWIND_SAILS}
+    downwind_selection = st.pills(
+        "Downwind",
+        options=list(downwind_options.keys()),
+        format_func=lambda x: downwind_options[x],
+        default=st.session_state.downwind if st.session_state.downwind else None,
+        key="downwind_pills",
+        label_visibility="collapsed",
+    )
+    new_downwind = downwind_selection if downwind_selection else ""
+    if new_downwind != st.session_state.downwind:
+        st.session_state.downwind = new_downwind
+        if new_downwind != "REACHING_SPI":
+            st.session_state.headsail = ""
+            st.session_state.staysail_mode = False
+        elif st.session_state.headsail not in ["JIB", ""]:
+            st.session_state.headsail = ""
+        mark_pending()
+
+    # Staysail toggle
+    if st.session_state.headsail == "JIB" and st.session_state.downwind == "REACHING_SPI":
+        staysail = st.checkbox(
+            "Jib as Staysail",
+            value=st.session_state.staysail_mode,
+            key="staysail_check"
+        )
+        if staysail != st.session_state.staysail_mode:
+            st.session_state.staysail_mode = staysail
+            mark_pending()
+
+# Render the sail selector fragment
+sail_selector()
+
+# ============ BOTTOM ACTION BAR ============
+
+# Comment popover
+has_comment = bool(st.session_state.pending_comment)
+popover_label = "NOTE ✓" if has_comment else "NOTE"
+with st.popover(popover_label, use_container_width=True):
+    comment = st.text_area(
+        "Add a note",
+        value=st.session_state.pending_comment,
+        height=60,
+        placeholder="Conditions, reason for change...",
+        label_visibility="collapsed"
+    )
+    if comment != st.session_state.pending_comment:
+        st.session_state.pending_comment = comment
+
+# Backdate toggle (collapsible)
+use_backdate = st.checkbox("Backdate entry", key="use_backdate")
+if use_backdate:
+    local_now = datetime.now(timezone.utc).astimezone(boat_tz)
+    tz_abbrev = local_now.strftime("%Z")
+    entry_date = st.date_input("Date", value=local_now.date(), key="entry_date", label_visibility="collapsed")
+    # Hour and minute dropdowns on separate lines (5-min granularity)
+    current_hour = local_now.hour
+    current_min = (local_now.minute // 5) * 5  # Round to nearest 5
+    hours = list(range(24))
+    minutes = list(range(0, 60, 5))
+    sel_hour = st.selectbox("Hour", hours, index=current_hour, key="entry_hour", format_func=lambda x: f"{x:02d}h")
+    sel_min = st.selectbox("Minute", minutes, index=minutes.index(current_min), key="entry_min", format_func=lambda x: f"{x:02d}m")
+    entry_time = dt_time(sel_hour, sel_min)
+    local_dt = datetime.combine(entry_date, entry_time).replace(tzinfo=boat_tz)
+    st.session_state.backdate_time = local_dt.astimezone(timezone.utc)
+else:
+    st.session_state.backdate_time = None
+
+# UPDATE button
+if st.button("UPDATE", key="update", use_container_width=True, type="primary"):
+    # Get backdate time from sidebar if set
+    timestamp = st.session_state.get("backdate_time")
+
+    success = write_sail_config(
+        main=st.session_state.main,
+        headsail=st.session_state.headsail,
+        downwind=st.session_state.downwind,
+        staysail_mode=st.session_state.staysail_mode,
+        comment=st.session_state.pending_comment,
+        timestamp=timestamp
+    )
+    if success:
+        clear_pending()
+        # Clear caches so new data appears
+        get_current_sail_config.clear()
+        get_recent_entries.clear()
+        st.toast("Saved!", icon="✅")
+        st.rerun()
+    else:
+        st.error("Failed to save")
