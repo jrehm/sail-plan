@@ -520,11 +520,12 @@ st.markdown("""
         font-size: 0.85rem !important;
     }
     /* Red trash can buttons in history */
-    [data-testid="stSidebar"] .stButton > button:has(p) {
+    [data-testid="stSidebar"] [data-testid="column"]:last-child .stButton > button {
         color: #dc3545 !important;
         border-color: #dc3545 !important;
+        background-color: transparent !important;
     }
-    [data-testid="stSidebar"] .stButton > button:has(p):hover {
+    [data-testid="stSidebar"] [data-testid="column"]:last-child .stButton > button:hover {
         background-color: #dc3545 !important;
         color: white !important;
     }
