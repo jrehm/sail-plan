@@ -12,11 +12,14 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
+import requests
 import streamlit as st
 from dotenv import load_dotenv
 from influxdb_client import InfluxDBClient, Point, WritePrecision
 from influxdb_client.client.write_api import SYNCHRONOUS
+from timezonefinder import TimezoneFinder
 
 if TYPE_CHECKING:
     from influxdb_client import InfluxDBClient as InfluxDBClientType
@@ -29,6 +32,103 @@ INFLUX_URL = os.getenv("INFLUX_URL", "http://localhost:8086")
 INFLUX_TOKEN = os.getenv("INFLUX_TOKEN", "")
 INFLUX_ORG = os.getenv("INFLUX_ORG", "openplotter")
 INFLUX_BUCKET = os.getenv("INFLUX_BUCKET", "default")
+
+# Signal K Configuration (for automatic timezone from GPS)
+SIGNALK_URL = os.getenv("SIGNALK_URL", "http://localhost:3000")
+
+# Timezone finder instance (reused for performance)
+_tz_finder = TimezoneFinder()
+
+
+def get_boat_position() -> tuple[float, float] | None:
+    """
+    Fetch the boat's current GPS position from Signal K.
+
+    Returns:
+        Tuple of (latitude, longitude) or None if unavailable.
+    """
+    try:
+        response = requests.get(
+            f"{SIGNALK_URL}/signalk/v1/api/vessels/self/navigation/position",
+            timeout=2,
+        )
+        if response.status_code == 200:
+            data = response.json()
+            lat = data.get("value", {}).get("latitude")
+            lon = data.get("value", {}).get("longitude")
+            if lat is not None and lon is not None:
+                return (lat, lon)
+    except requests.RequestException:
+        pass
+    return None
+
+
+def get_boat_timezone() -> ZoneInfo:
+    """
+    Get the timezone for the boat's current position.
+
+    Fetches GPS position from Signal K and converts to timezone.
+    Falls back to UTC if position unavailable or lookup fails.
+
+    Returns:
+        ZoneInfo object for the boat's timezone.
+    """
+    # Check cache in session state (refresh every 10 minutes)
+    cache_key = "tz_cache"
+    cache_time_key = "tz_cache_time"
+    now = datetime.now(timezone.utc)
+
+    if cache_key in st.session_state and cache_time_key in st.session_state:
+        cache_age = (now - st.session_state[cache_time_key]).total_seconds()
+        if cache_age < 600:  # 10 minutes
+            return st.session_state[cache_key]
+
+    # Fetch position and lookup timezone
+    position = get_boat_position()
+    if position:
+        tz_name = _tz_finder.timezone_at(lat=position[0], lng=position[1])
+        if tz_name:
+            tz = ZoneInfo(tz_name)
+            st.session_state[cache_key] = tz
+            st.session_state[cache_time_key] = now
+            return tz
+
+    # Fall back to UTC
+    return ZoneInfo("UTC")
+
+
+def format_local_time(dt: datetime, tz: ZoneInfo) -> str:
+    """
+    Format a datetime in the given timezone with zone abbreviation.
+
+    Args:
+        dt: Datetime to format (should be timezone-aware).
+        tz: Target timezone.
+
+    Returns:
+        Formatted time string like "14:32:15 CDT".
+    """
+    local_dt = dt.astimezone(tz)
+    # Get timezone abbreviation (e.g., CDT, EST, UTC)
+    tz_abbrev = local_dt.strftime("%Z")
+    return local_dt.strftime(f"%H:%M:%S {tz_abbrev}")
+
+
+def format_local_datetime(dt: datetime, tz: ZoneInfo) -> str:
+    """
+    Format a datetime with date in the given timezone.
+
+    Args:
+        dt: Datetime to format (should be timezone-aware).
+        tz: Target timezone.
+
+    Returns:
+        Formatted string like "01/15 14:32 CDT".
+    """
+    local_dt = dt.astimezone(tz)
+    tz_abbrev = local_dt.strftime("%Z")
+    return local_dt.strftime(f"%m/%d %H:%M {tz_abbrev}")
+
 
 # Sail definitions
 MAIN_STATES = ["DOWN", "FULL", "R1", "R2", "R3", "R4"]
@@ -302,9 +402,10 @@ if "initialized" not in st.session_state:
     st.session_state.staysail_mode = current_config["staysail_mode"]
     st.session_state.initialized = True
 
-# Header with current time
+# Header with current time (in boat's local timezone)
 st.markdown("# ⛵ MORTICIA")
-current_time = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
+boat_tz = get_boat_timezone()
+current_time = format_local_time(datetime.now(timezone.utc), boat_tz)
 st.markdown(f'<div class="time-display">{current_time}</div>', unsafe_allow_html=True)
 
 # ALL DOWN button
@@ -439,16 +540,20 @@ st.markdown("---")
 # Optional fields
 st.markdown('<div class="section-header">LOG ENTRY OPTIONS</div>', unsafe_allow_html=True)
 
-# Backdate option
+# Backdate option (in boat's local timezone)
 use_backdate = st.checkbox("📅 Backdate this entry", key="use_backdate")
 entry_time = None
 if use_backdate:
+    local_now = datetime.now(timezone.utc).astimezone(boat_tz)
+    tz_abbrev = local_now.strftime("%Z")
     col1, col2 = st.columns(2)
     with col1:
-        entry_date = st.date_input("Date", value=datetime.now().date(), key="entry_date")
+        entry_date = st.date_input("Date", value=local_now.date(), key="entry_date")
     with col2:
-        entry_time_input = st.time_input("Time (UTC)", value=datetime.now().time(), key="entry_time")
-    entry_time = datetime.combine(entry_date, entry_time_input).replace(tzinfo=timezone.utc)
+        entry_time_input = st.time_input(f"Time ({tz_abbrev})", value=local_now.time(), key="entry_time")
+    # Combine and convert local time to UTC for storage
+    local_dt = datetime.combine(entry_date, entry_time_input).replace(tzinfo=boat_tz)
+    entry_time = local_dt.astimezone(timezone.utc)
 
 # Comment field
 comment = st.text_area("💬 Comment (optional)", height=80, key="comment",
@@ -479,7 +584,7 @@ with st.expander("📜 Recent Sail Changes"):
     entries = get_recent_entries(10)
     if entries:
         for entry in entries:
-            time_str = entry["time"].strftime("%m/%d %H:%M UTC")
+            time_str = format_local_datetime(entry["time"], boat_tz)
             parts = []
             if entry["main"]:
                 parts.append(f"Main:{entry['main']}")
