@@ -10,7 +10,7 @@ OpenPlotter/Signal K/Grafana monitoring stacks.
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
@@ -283,6 +283,39 @@ def get_recent_entries(limit: int = 10) -> list[dict]:
     return entries
 
 
+def delete_sail_entry(timestamp: datetime) -> bool:
+    """
+    Delete a sail configuration entry from InfluxDB.
+
+    Args:
+        timestamp: The exact timestamp of the entry to delete.
+
+    Returns:
+        True if delete succeeded, False otherwise.
+    """
+    client = get_influx_client()
+    delete_api = client.delete_api()
+
+    # Delete requires a time range - use 1 second window around the exact timestamp
+    start = timestamp - timedelta(milliseconds=500)
+    stop = timestamp + timedelta(milliseconds=500)
+
+    try:
+        delete_api.delete(
+            start=start,
+            stop=stop,
+            predicate='_measurement="sail_config" AND vessel="morticia"',
+            bucket=INFLUX_BUCKET,
+            org=INFLUX_ORG,
+        )
+        client.close()
+        return True
+    except Exception as e:
+        st.error(f"Error deleting entry: {e}")
+        client.close()
+        return False
+
+
 # Page configuration
 st.set_page_config(
     page_title="Morticia Sail Plan",
@@ -390,6 +423,12 @@ st.markdown("""
         color: #666;
         text-align: center;
         margin-bottom: 0.5rem;
+    }
+
+    /* Delete confirmation styling */
+    .confirm-delete {
+        background-color: #dc3545 !important;
+        color: white !important;
     }
     
     /* Responsive adjustments for tablets landscape */
@@ -667,7 +706,11 @@ st.markdown('</div>', unsafe_allow_html=True)
 with st.expander("📜 Recent Sail Changes"):
     entries = get_recent_entries(10)
     if entries:
-        for entry in entries:
+        # Track which entry is pending delete confirmation
+        if "pending_delete" not in st.session_state:
+            st.session_state.pending_delete = None
+
+        for i, entry in enumerate(entries):
             time_str = format_local_datetime(entry["time"], boat_tz)
             parts = []
             if entry["main"]:
@@ -679,10 +722,35 @@ with st.expander("📜 Recent Sail Changes"):
                 parts.append(h)
             if entry["downwind"]:
                 parts.append(SAIL_DISPLAY.get(entry["downwind"], entry["downwind"]))
-            
+
             config = " + ".join(parts) if parts else "All down"
             comment_str = f' - "{entry["comment"]}"' if entry["comment"] else ""
-            
-            st.markdown(f"**{time_str}**: {config}{comment_str}")
+
+            # Use columns for entry text and delete button
+            entry_key = entry["time"].isoformat()
+            is_pending = st.session_state.pending_delete == entry_key
+
+            if is_pending:
+                # Show confirm/cancel row
+                col1, col2, col3 = st.columns([4, 1, 1])
+                with col1:
+                    st.markdown(f"⚠️ **Delete this entry?**")
+                with col2:
+                    if st.button("✓ Yes", key=f"confirm_{i}", type="primary"):
+                        if delete_sail_entry(entry["time"]):
+                            st.session_state.pending_delete = None
+                            st.rerun()
+                with col3:
+                    if st.button("✗ No", key=f"cancel_{i}"):
+                        st.session_state.pending_delete = None
+                        st.rerun()
+            else:
+                col1, col2 = st.columns([5, 1])
+                with col1:
+                    st.markdown(f"**{time_str}**: {config}{comment_str}")
+                with col2:
+                    if st.button("🗑️", key=f"delete_{i}", help="Delete entry"):
+                        st.session_state.pending_delete = entry_key
+                        st.rerun()
     else:
         st.markdown("*No recent entries*")
