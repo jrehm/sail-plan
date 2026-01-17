@@ -10,7 +10,7 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 
 # InfluxDB Configuration
 INFLUX_URL = "http://localhost:8086"
-INFLUX_TOKEN = "qB2GQt3CfARoynaYuJqbH78RgoazzpkSjifheRp7_lc6Zxl1j_J6PrCynl60MX_2Qo7jwQ1-i_wv9zpXz3Wphg=="
+INFLUX_TOKEN = "jauW1yat2UV8N5yTvzjUZwe3QEYFaHfvdrBcMLNm4hloGPiXbBVsSJ55EG2WDdKH-feIm5s1Uz_z4kCk_ziAIw=="
 INFLUX_ORG = "openplotter"
 INFLUX_BUCKET = "Default"
 
