@@ -9,6 +9,8 @@ OpenPlotter/Signal K/Grafana monitoring stacks.
 
 from __future__ import annotations
 
+__version__ = "0.9.0"
+
 import os
 from datetime import datetime, time as dt_time, timedelta, timezone
 from typing import TYPE_CHECKING
@@ -868,3 +870,9 @@ if st.button("UPDATE", key="update", use_container_width=True, type="primary"):
         st.rerun()
     else:
         st.error("Failed to save")
+
+# Version footer
+st.markdown(
+    f'<div style="text-align:center;color:#999;font-size:0.75rem;margin-top:1rem;">v{__version__}</div>',
+    unsafe_allow_html=True
+)
