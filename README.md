@@ -7,12 +7,14 @@ Data stored in InfluxDB for integration with OpenPlotter/Signal K/Grafana stack.
 
 - Touch-friendly interface optimized for phones and tablets
 - Real-time sail configuration logging to InfluxDB
-- Automatic loading of last known sail state on startup
+- **Automatic local timezone** from Signal K GPS position (no UTC mental math while racing)
+- **Multi-user safe** - always fetches fresh state from database, shows pending changes indicator
 - Mutual exclusivity logic for headsails and downwind sails
 - Staysail mode support (Jib + Reaching Spi combo)
 - Optional backdating for missed entries
+- **Delete entries** from history to correct mistakes
 - Comment field for notes
-- Recent history view
+- Recent history view with delete capability
 
 ## Sail Inventory
 
@@ -38,7 +40,7 @@ make install
 
 ## Configuration
 
-Copy the example environment file and configure your InfluxDB settings:
+Copy the example environment file and configure your settings:
 
 ```bash
 cp .env.example .env
@@ -47,11 +49,26 @@ cp .env.example .env
 Edit `.env` with your actual values:
 
 ```bash
+# InfluxDB Configuration
 INFLUX_URL=http://localhost:8086
 INFLUX_TOKEN=your-influxdb-token-here
 INFLUX_ORG=openplotter
 INFLUX_BUCKET=default
+
+# Signal K Configuration (for automatic timezone from GPS)
+SIGNALK_URL=http://localhost:3000
 ```
+
+### Automatic Timezone
+
+The app automatically determines the boat's timezone from GPS position via Signal K:
+
+1. Fetches position from Signal K API (`/signalk/v1/api/vessels/self/navigation/position`)
+2. Converts lat/lon to timezone using `timezonefinder`
+3. Caches timezone for 10 minutes
+4. Falls back to UTC if Signal K is unavailable
+
+All times (header clock, history entries, backdate picker) display in local timezone.
 
 ## Running
 
@@ -91,6 +108,23 @@ make help
 
 Access from crew phones/tablets at: `http://<pi-ip-address>:8501`
 
+## Multi-User Behavior
+
+The app is designed for multiple crew members to use simultaneously:
+
+- **Fresh state on every load**: Each page render fetches the current sail config from InfluxDB
+- **Pending changes indicator**: Yellow banner shows "You have unsaved changes" when you've made selections but haven't saved
+- **Database state shown**: When editing, the current database state is displayed for comparison
+- **No stale data**: If another crew member updates the sail plan, you'll see it on your next interaction
+
+### Correcting Mistakes
+
+To fix an incorrect entry:
+1. Expand "Recent Sail Changes" in the app
+2. Click the 🗑️ button next to the wrong entry
+3. Confirm deletion with "Yes"
+4. Create a new (backdated if needed) entry with the correct information
+
 ## Run at Startup (systemd)
 
 Create `/etc/systemd/system/sail-plan.service`:
@@ -98,7 +132,7 @@ Create `/etc/systemd/system/sail-plan.service`:
 ```ini
 [Unit]
 Description=Morticia Sail Plan Tracker
-After=network.target influxdb.service
+After=network.target influxdb.service signalk.service
 
 [Service]
 Type=simple
