@@ -397,7 +397,7 @@ st.markdown("""
         position: sticky;
         top: 0;
         z-index: 99;
-        background: white;
+        background: transparent;
         padding: 0.25rem 0;
         margin-bottom: 0.25rem;
     }
@@ -576,6 +576,32 @@ st.markdown("""
             font-size: 1.6rem !important;
         }
     }
+
+    /* Dark mode adjustments */
+    @media (prefers-color-scheme: dark) {
+        .pending-indicator {
+            background-color: #5c4d00;
+            color: #ffd700;
+        }
+        .history-row {
+            color: #e0e0e0 !important;
+        }
+        .history-row small, .history-row b, .history-row i {
+            color: #e0e0e0 !important;
+        }
+    }
+
+    /* Streamlit dark theme detection */
+    [data-testid="stAppViewContainer"][data-theme="dark"] .pending-indicator,
+    .stApp[data-theme="dark"] .pending-indicator {
+        background-color: #5c4d00;
+        color: #ffd700;
+    }
+    [data-testid="stSidebar"][data-theme="dark"] .history-row,
+    [data-testid="stSidebar"] .history-row small,
+    [data-testid="stSidebar"] .history-row b {
+        color: inherit !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -675,8 +701,8 @@ with st.sidebar:
             entry_key = entry["time"].isoformat()
             is_pending = st.session_state.pending_delete == entry_key
 
-            # Alternate row shading (stronger contrast)
-            bg_color = "#d0d0d0" if i % 2 == 0 else "#f8f8f8"
+            # Alternate row shading (semi-transparent for dark mode compatibility)
+            bg_color = "rgba(128,128,128,0.3)" if i % 2 == 0 else "rgba(128,128,128,0.1)"
 
             if is_pending:
                 # Compact confirmation row
