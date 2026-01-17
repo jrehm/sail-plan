@@ -24,37 +24,69 @@ Data stored in InfluxDB for integration with OpenPlotter/Signal K/Grafana stack.
 ## Installation (Raspberry Pi)
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt --break-system-packages
-
-# Or use a virtual environment
+# Using a virtual environment (recommended)
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+
+# Or install system-wide
+pip install -r requirements.txt --break-system-packages
+
+# Or using make
+make install
 ```
 
 ## Configuration
 
-Edit the InfluxDB settings at the top of `sail_plan_app.py` if needed:
+Copy the example environment file and configure your InfluxDB settings:
 
-```python
-INFLUX_URL = "http://localhost:8086"
-INFLUX_TOKEN = "your-token-here"
-INFLUX_ORG = "openplotter"
-INFLUX_BUCKET = "Default"
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your actual values:
+
+```bash
+INFLUX_URL=http://localhost:8086
+INFLUX_TOKEN=your-influxdb-token-here
+INFLUX_ORG=openplotter
+INFLUX_BUCKET=default
 ```
 
 ## Running
 
 ```bash
-# Basic
+# Basic (using make)
+make run
+
+# Or using streamlit directly
 streamlit run sail_plan_app.py
 
 # Accessible from other devices on boat network
-streamlit run sail_plan_app.py --server.address 0.0.0.0 --server.port 8501
+make run-network
+# Or: streamlit run sail_plan_app.py --server.address 0.0.0.0 --server.port 8501
 
 # With auto-reload disabled (slightly faster)
 streamlit run sail_plan_app.py --server.address 0.0.0.0 --server.runOnSave false
+```
+
+## Development
+
+```bash
+# Install dev dependencies (ruff, mypy)
+make install-dev
+
+# Run linter
+make lint
+
+# Format code
+make format
+
+# Type checking
+make typecheck
+
+# See all available commands
+make help
 ```
 
 Access from crew phones/tablets at: `http://<pi-ip-address>:8501`
@@ -72,7 +104,8 @@ After=network.target influxdb.service
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/sail_plan
-ExecStart=/usr/bin/streamlit run sail_plan_app.py --server.address 0.0.0.0 --server.port 8501 --server.headless true
+EnvironmentFile=/home/pi/sail_plan/.env
+ExecStart=/home/pi/sail_plan/venv/bin/streamlit run sail_plan_app.py --server.address 0.0.0.0 --server.port 8501 --server.headless true
 Restart=always
 RestartSec=10
 

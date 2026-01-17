@@ -1,18 +1,34 @@
 """
 Morticia Sail Plan Tracker
-Streamlit app for logging sail configurations to InfluxDB
+
+A Streamlit web application for logging sail configurations on the SeaCart 30
+trimaran "Morticia". Provides a touch-friendly interface optimized for phones
+and tablets, with data persistence to InfluxDB for integration with
+OpenPlotter/Signal K/Grafana monitoring stacks.
 """
 
-import streamlit as st
+from __future__ import annotations
+
+import os
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
+
+import streamlit as st
+from dotenv import load_dotenv
 from influxdb_client import InfluxDBClient, Point, WritePrecision
 from influxdb_client.client.write_api import SYNCHRONOUS
 
-# InfluxDB Configuration
-INFLUX_URL = "http://localhost:8086"
-INFLUX_TOKEN = "jauW1yat2UV8N5yTvzjUZwe3QEYFaHfvdrBcMLNm4hloGPiXbBVsSJ55EG2WDdKH-feIm5s1Uz_z4kCk_ziAIw=="
-INFLUX_ORG = "openplotter"
-INFLUX_BUCKET = "default"
+if TYPE_CHECKING:
+    from influxdb_client import InfluxDBClient as InfluxDBClientType
+
+# Load environment variables from .env file if present
+load_dotenv()
+
+# InfluxDB Configuration (from environment variables)
+INFLUX_URL = os.getenv("INFLUX_URL", "http://localhost:8086")
+INFLUX_TOKEN = os.getenv("INFLUX_TOKEN", "")
+INFLUX_ORG = os.getenv("INFLUX_ORG", "openplotter")
+INFLUX_BUCKET = os.getenv("INFLUX_BUCKET", "default")
 
 # Sail definitions
 MAIN_STATES = ["DOWN", "FULL", "R1", "R2", "R3", "R4"]
@@ -30,13 +46,19 @@ SAIL_DISPLAY = {
 }
 
 
-def get_influx_client():
-    """Create InfluxDB client"""
+def get_influx_client() -> InfluxDBClient:
+    """Create and return a configured InfluxDB client instance."""
     return InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG)
 
 
-def get_current_sail_config():
-    """Fetch most recent sail configuration from InfluxDB"""
+def get_current_sail_config() -> dict[str, str | bool]:
+    """
+    Fetch the most recent sail configuration from InfluxDB.
+
+    Returns:
+        Dictionary containing main, headsail, downwind, staysail_mode, and comment.
+        Returns default values if no configuration found or on error.
+    """
     client = get_influx_client()
     query_api = client.query_api()
     
@@ -68,8 +90,28 @@ def get_current_sail_config():
     return {"main": "DOWN", "headsail": "", "downwind": "", "staysail_mode": False, "comment": ""}
 
 
-def write_sail_config(main, headsail, downwind, staysail_mode, comment, timestamp=None):
-    """Write sail configuration to InfluxDB"""
+def write_sail_config(
+    main: str,
+    headsail: str,
+    downwind: str,
+    staysail_mode: bool,
+    comment: str,
+    timestamp: datetime | None = None,
+) -> bool:
+    """
+    Write a sail configuration entry to InfluxDB.
+
+    Args:
+        main: Main sail state (DOWN, FULL, R1-R4).
+        headsail: Headsail selection (JIB, J1, STORM, or empty).
+        downwind: Downwind sail selection (BIGGEE, REACHING_SPI, WHOMPER, or empty).
+        staysail_mode: Whether jib is being used as staysail with Reaching Spi.
+        comment: Optional note about conditions or reason for change.
+        timestamp: Optional backdated timestamp. Uses current UTC time if None.
+
+    Returns:
+        True if write succeeded, False otherwise.
+    """
     client = get_influx_client()
     write_api = client.write_api(write_options=SYNCHRONOUS)
     
@@ -97,8 +139,17 @@ def write_sail_config(main, headsail, downwind, staysail_mode, comment, timestam
         return False
 
 
-def get_recent_entries(limit=10):
-    """Fetch recent sail log entries"""
+def get_recent_entries(limit: int = 10) -> list[dict]:
+    """
+    Fetch recent sail log entries from the past 7 days.
+
+    Args:
+        limit: Maximum number of entries to return.
+
+    Returns:
+        List of dictionaries containing time, main, headsail, downwind,
+        staysail_mode, and comment for each entry.
+    """
     client = get_influx_client()
     query_api = client.query_api()
     

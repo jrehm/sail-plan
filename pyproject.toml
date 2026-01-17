@@ -1,0 +1,42 @@
+[project]
+name = "sail-plan"
+version = "0.1.0"
+description = "Sail plan tracker for SeaCart 30 trimaran Morticia"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Jeff Rehm" }]
+requires-python = ">=3.10"
+dependencies = [
+    "streamlit>=1.28.0",
+    "influxdb-client>=1.36.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_ignores = true
