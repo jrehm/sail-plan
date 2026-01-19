@@ -382,21 +382,21 @@ st.markdown("""
 
     /* Style pills for touch-friendly mobile use */
     [data-testid="stPills"] {
-        gap: 10px !important;
+        gap: 15px !important;
     }
     [data-testid="stPills"] button {
-        min-height: 68px !important;
-        padding: 0.8rem 1.4rem !important;
-        font-size: 1.75rem !important;
+        min-height: 102px !important;
+        padding: 1.2rem 2.1rem !important;
+        font-size: 2.6rem !important;
         font-weight: bold !important;
-        border-radius: 12px !important;
+        border-radius: 18px !important;
         touch-action: manipulation;
     }
     /* Pills container should wrap on mobile */
     [data-testid="stPills"] > div {
         flex-wrap: wrap !important;
         justify-content: center !important;
-        gap: 10px !important;
+        gap: 15px !important;
     }
 
     /* Bottom bar columns - keep side by side */
@@ -587,9 +587,9 @@ st.markdown("""
         }
         /* Pills stay readable on mobile */
         [data-testid="stPills"] button {
-            min-height: 62px !important;
-            padding: 0.7rem 1.1rem !important;
-            font-size: 1.6rem !important;
+            min-height: 93px !important;
+            padding: 1rem 1.6rem !important;
+            font-size: 2.4rem !important;
         }
     }
 
