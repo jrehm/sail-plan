@@ -731,6 +731,7 @@ with st.sidebar:
                         if delete_sail_entry(entry["time"]):
                             st.session_state.pending_delete = None
                             get_recent_entries.clear()
+                            get_current_sail_config.clear()
                             st.rerun()
                 with cols[2]:
                     if st.button("✗", key=f"cancel_{i}", help="Cancel"):
