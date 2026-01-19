@@ -470,11 +470,11 @@ st.markdown("""
         touch-action: manipulation;
     }
 
-    /* Primary button (UPDATE) - blue */
+    /* Primary button (UPDATE) - green */
     .stButton > button[kind="primary"] {
-        background-color: #007bff !important;
+        background-color: #28a745 !important;
         color: white !important;
-        border: 2px solid #0056b3 !important;
+        border: 2px solid #1e7e34 !important;
     }
 
     /* Popover trigger button styling */
@@ -774,14 +774,13 @@ config_summary = format_config_summary(
     st.session_state.staysail_mode,
 )
 
-# Sticky header containing: title/time, state banner, pending indicator
+# Sticky header containing: title/time and pending indicator
 st.markdown(f'''
 <div class="sticky-header">
     <div class="compact-header">
         <span class="title">{BOAT_NAME.upper()}</span>
         <span class="time" id="header-clock">{current_time}</span>
     </div>
-    <div class="state-banner">{config_summary}</div>
     {pending_html}
 </div>
 <script>
@@ -796,6 +795,13 @@ st.markdown(f'''
     setInterval(updateClock, 30000);
 </script>
 ''', unsafe_allow_html=True)
+
+# State banner and UPDATE button side by side
+col_status, col_update = st.columns([2, 1])
+with col_status:
+    st.markdown(f'<div class="state-banner">{config_summary}</div>', unsafe_allow_html=True)
+with col_update:
+    update_clicked = st.button("UPDATE", key="update", use_container_width=True, type="primary")
 
 # ============ SAIL SELECTION (Fragment for fast updates) ============
 @st.fragment
@@ -902,9 +908,9 @@ if use_backdate:
 else:
     st.session_state.backdate_time = None
 
-# UPDATE button
-if st.button("UPDATE", key="update", use_container_width=True, type="primary"):
-    # Get backdate time from sidebar if set
+# Handle UPDATE button click (button is at top of page)
+if update_clicked:
+    # Get backdate time if set
     timestamp = st.session_state.get("backdate_time")
 
     success = write_sail_config(
