@@ -68,15 +68,15 @@ def get_boat_position() -> tuple[float, float] | None:
     return None
 
 
-def get_boat_timezone() -> ZoneInfo:
+def get_boat_timezone() -> ZoneInfo | timezone:
     """
     Get the timezone for the boat's current position.
 
     Fetches GPS position from Signal K and converts to timezone.
-    Falls back to UTC if position unavailable or lookup fails.
+    Falls back to system local timezone if position unavailable.
 
     Returns:
-        ZoneInfo object for the boat's timezone.
+        Timezone object for the boat's timezone.
     """
     # Check cache in session state (refresh every 10 minutes)
     cache_key = "tz_cache"
@@ -98,8 +98,11 @@ def get_boat_timezone() -> ZoneInfo:
             st.session_state[cache_time_key] = now
             return tz
 
-    # Fall back to UTC
-    return ZoneInfo("UTC")
+    # Fall back to system local timezone
+    local_tz = datetime.now().astimezone().tzinfo
+    st.session_state[cache_key] = local_tz
+    st.session_state[cache_time_key] = now
+    return local_tz
 
 
 def format_local_time(dt: datetime, tz: ZoneInfo) -> str:
