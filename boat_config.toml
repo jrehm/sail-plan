@@ -19,7 +19,7 @@ options = ["BIGGEE", "REACHING_SPI", "WHOMPER"]
 # Display names for UI buttons (short versions)
 # Keys must match the options defined above
 [display]
-DOWN = "DN"
+DOWN = "Down"
 FULL = "FULL"
 R1 = "R1"
 R2 = "R2"
@@ -29,5 +29,5 @@ JIB = "Jib"
 J1 = "J1"
 STORM = "Storm"
 BIGGEE = "Biggee"
-REACHING_SPI = "R.Spi"
-WHOMPER = "Whomp"
+REACHING_SPI = "Reaching Spin"
+WHOMPER = "Whomper"
