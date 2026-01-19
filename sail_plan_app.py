@@ -12,7 +12,10 @@ from __future__ import annotations
 __version__ = "0.9.0"
 
 import os
+import sys
+import tomllib
 from datetime import datetime, time as dt_time, timedelta, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
@@ -130,26 +133,39 @@ def format_local_datetime(dt: datetime, tz: ZoneInfo) -> str:
     return local_dt.strftime(f"%m/%d %H:%M {tz_abbrev}")
 
 
-# Sail definitions
-MAIN_STATES = ["DOWN", "FULL", "R1", "R2", "R3", "R4"]
-HEADSAILS = ["JIB", "J1", "STORM"]
-DOWNWIND_SAILS = ["BIGGEE", "REACHING_SPI", "WHOMPER"]
+# Boat configuration from TOML file
+def load_boat_config() -> dict:
+    """
+    Load boat-specific configuration from TOML file.
+
+    Looks for boat_config.toml in the same directory as the app.
+    Falls back to boat_config.toml.example if not found.
+    Exits with error if neither file exists.
+    """
+    app_dir = Path(__file__).parent
+    config_path = app_dir / "boat_config.toml"
+    example_path = app_dir / "boat_config.toml.example"
+
+    if config_path.exists():
+        with open(config_path, "rb") as f:
+            return tomllib.load(f)
+    elif example_path.exists():
+        with open(example_path, "rb") as f:
+            return tomllib.load(f)
+    else:
+        sys.exit("Error: boat_config.toml not found. Copy boat_config.toml.example to boat_config.toml and customize.")
+
+
+_boat_config = load_boat_config()
+
+# Sail definitions (loaded from boat_config.toml)
+BOAT_NAME = _boat_config.get("boat", {}).get("name", "Boat")
+MAIN_STATES = _boat_config.get("sails", {}).get("main", {}).get("options", [])
+HEADSAILS = _boat_config.get("sails", {}).get("headsail", {}).get("options", [])
+DOWNWIND_SAILS = _boat_config.get("sails", {}).get("downwind", {}).get("options", [])
 
 # Display names for sails (short versions for buttons)
-SAIL_DISPLAY = {
-    "DOWN": "DN",
-    "FULL": "FULL",
-    "R1": "R1",
-    "R2": "R2",
-    "R3": "R3",
-    "R4": "R4",
-    "BIGGEE": "Biggee",
-    "REACHING_SPI": "R.Spi",
-    "WHOMPER": "Whomp",
-    "JIB": "Jib",
-    "J1": "J1",
-    "STORM": "Storm",
-}
+SAIL_DISPLAY = _boat_config.get("display", {})
 
 
 def get_influx_client() -> InfluxDBClient:
@@ -329,7 +345,7 @@ def delete_sail_entry(timestamp: datetime) -> bool:
 
 # Page configuration
 st.set_page_config(
-    page_title="Morticia Sail Plan",
+    page_title=f"{BOAT_NAME} Sail Plan",
     page_icon="⛵",
     layout="wide",
     initial_sidebar_state="collapsed",

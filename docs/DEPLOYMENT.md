@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This guide covers deploying the Morticia Sail Plan Tracker on a Raspberry Pi running OpenPlotter.
+This guide covers deploying the Sail Plan Tracker on a Raspberry Pi running OpenPlotter.
 
 ## Prerequisites
 
@@ -56,7 +56,33 @@ SIGNALK_URL=http://localhost:3000
 2. Navigate to Data > API Tokens
 3. Generate or copy an existing token with read/write access to your bucket
 
-### 4. Test the Application
+### 4. Configure Boat
+
+```bash
+cp boat_config.toml.example boat_config.toml
+nano boat_config.toml
+```
+
+Customize for your boat's sail inventory:
+```toml
+[boat]
+name = "Your Boat Name"
+
+[sails.main]
+options = ["DOWN", "FULL", "REEF1", "REEF2"]
+
+[sails.headsail]
+options = ["JIB", "GENOA"]
+
+[sails.downwind]
+options = ["SPINNAKER"]
+
+[display]
+DOWN = "DN"
+# ... short names for UI buttons
+```
+
+### 5. Test the Application
 
 ```bash
 make run
@@ -73,7 +99,7 @@ Create `/etc/systemd/system/sail-plan.service`:
 
 ```ini
 [Unit]
-Description=Morticia Sail Plan Tracker
+Description=Sail Plan Tracker
 After=network.target influxdb.service signalk.service
 
 [Service]
@@ -246,11 +272,13 @@ hostname -I
 
 ```
 /home/pi/sail-plan/
-├── .env                 # Local config (gitignored)
-├── .env.example         # Config template
-├── sail_plan_app.py     # Main application
-├── requirements.txt     # Python dependencies
-├── venv/                # Python virtual environment
+├── .env                       # Environment config (gitignored)
+├── .env.example               # Environment template
+├── boat_config.toml           # Boat-specific config (sail inventory)
+├── boat_config.toml.example   # Boat config template
+├── sail_plan_app.py           # Main application
+├── requirements.txt           # Python dependencies
+├── venv/                      # Python virtual environment
 └── scripts/
-    └── sync.sh          # GitHub sync script
+    └── sync.sh                # GitHub sync script
 ```

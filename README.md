@@ -1,11 +1,11 @@
-# Morticia Sail Plan Tracker
+# Sail Plan Tracker
 
 [![Version](https://img.shields.io/badge/version-0.9.0-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/streamlit-1.28+-red.svg)](https://streamlit.io)
 
-A touch-friendly web app for logging sail configurations on the SeaCart 30 trimaran "Morticia". Data stored in InfluxDB for integration with OpenPlotter/Signal K/Grafana.
+A touch-friendly web app for logging sail configurations. Designed for use on a Raspberry Pi with OpenPlotter/Signal K/InfluxDB/Grafana. Boat-specific sail inventory is fully configurable via TOML.
 
 ## Table of Contents
 
@@ -37,9 +37,13 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# Configure
+# Configure environment
 cp .env.example .env
 # Edit .env with your InfluxDB token
+
+# Configure boat (customize sail inventory for your boat)
+cp boat_config.toml.example boat_config.toml
+# Edit boat_config.toml with your boat name and sails
 
 # Run
 streamlit run sail_plan_app.py
@@ -62,14 +66,30 @@ Multiple crew can use the app simultaneously:
 - Yellow "Unsaved changes" banner shows pending edits
 - Changes from other users appear on your next interaction
 
-## Sail Inventory
+## Boat Configuration
 
-| Category | Options |
-|----------|---------|
-| **Main** | Down, Full, R1, R2, R3, R4 |
-| **Headsail** | Jib, J1, Storm (mutually exclusive) |
-| **Downwind** | Biggee, Reaching Spi, Whomper (mutually exclusive) |
-| **Special** | Jib as staysail with Reaching Spi |
+Sail inventory is configured in `boat_config.toml`. Copy the example file and customize for your boat:
+
+```toml
+[boat]
+name = "My Boat"
+
+[sails.main]
+options = ["DOWN", "FULL", "REEF1", "REEF2"]
+
+[sails.headsail]
+options = ["JIB", "GENOA", "STORM"]
+
+[sails.downwind]
+options = ["SPINNAKER", "GENNAKER"]
+
+[display]
+DOWN = "DN"
+REEF1 = "R1"
+# ... short display names for UI buttons
+```
+
+See `boat_config.toml.example` for a full template.
 
 ## Documentation
 

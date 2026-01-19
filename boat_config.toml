@@ -1,0 +1,33 @@
+# Boat-specific configuration for Sail Plan Tracker
+# Copy this file to boat_config.toml and customize for your boat
+
+[boat]
+name = "Morticia"
+
+[sails.main]
+# Mainsail states - first option is typically "down/furled"
+options = ["DOWN", "FULL", "R1", "R2", "R3", "R4"]
+
+[sails.headsail]
+# Headsail options available on this boat
+options = ["JIB", "J1", "STORM"]
+
+[sails.downwind]
+# Downwind sail options (spinnakers, gennakers, etc.)
+options = ["BIGGEE", "REACHING_SPI", "WHOMPER"]
+
+# Display names for UI buttons (short versions)
+# Keys must match the options defined above
+[display]
+DOWN = "DN"
+FULL = "FULL"
+R1 = "R1"
+R2 = "R2"
+R3 = "R3"
+R4 = "R4"
+JIB = "Jib"
+J1 = "J1"
+STORM = "Storm"
+BIGGEE = "Biggee"
+REACHING_SPI = "R.Spi"
+WHOMPER = "Whomp"

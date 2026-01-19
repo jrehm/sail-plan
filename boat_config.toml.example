@@ -1,0 +1,33 @@
+# Boat-specific configuration for Sail Plan Tracker
+# Copy this file to boat_config.toml and customize for your boat
+
+[boat]
+name = "My Boat"
+
+[sails.main]
+# Mainsail states - first option is typically "down/furled"
+# Customize based on your reefing setup
+options = ["DOWN", "FULL", "REEF1", "REEF2"]
+
+[sails.headsail]
+# Headsail options available on this boat
+options = ["JIB", "GENOA", "STORM"]
+
+[sails.downwind]
+# Downwind sail options (spinnakers, gennakers, etc.)
+# Leave empty array [] if no downwind sails
+options = ["SPINNAKER", "GENNAKER"]
+
+# Display names for UI buttons (short versions)
+# Keys must match the options defined above
+# If not specified, the option name will be used as-is
+[display]
+DOWN = "DN"
+FULL = "FULL"
+REEF1 = "R1"
+REEF2 = "R2"
+JIB = "Jib"
+GENOA = "Genoa"
+STORM = "Storm"
+SPINNAKER = "Spin"
+GENNAKER = "Genn"

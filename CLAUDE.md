@@ -4,7 +4,7 @@ Project context for AI-assisted development. For deployment instructions, see [d
 
 ## Project Summary
 
-**Morticia Sail Plan Tracker** (v0.9.0) - Streamlit app for logging sail configurations on a SeaCart 30 trimaran. Runs on Raspberry Pi with OpenPlotter/Signal K/InfluxDB/Grafana stack.
+**Sail Plan Tracker** (v0.9.0) - Streamlit app for logging sail configurations. Boat-specific settings (sail inventory, display names) are configured via `boat_config.toml`. Runs on Raspberry Pi with OpenPlotter/Signal K/InfluxDB/Grafana stack.
 
 ## Architecture
 
@@ -34,18 +34,20 @@ sail_plan_app.py          # Single-file Streamlit app (~900 lines)
 
 ```
 sail-plan/
-├── sail_plan_app.py     # Main application
-├── requirements.txt     # Python deps
-├── pyproject.toml       # Package config + tool settings
-├── Makefile             # Dev commands
-├── .env.example         # Config template
-├── .env                 # Local config (gitignored)
+├── sail_plan_app.py           # Main application
+├── boat_config.toml           # Boat-specific config (sail inventory)
+├── boat_config.toml.example   # Template for boat config
+├── requirements.txt           # Python deps
+├── pyproject.toml             # Package config + tool settings
+├── Makefile                   # Dev commands
+├── .env.example               # Config template
+├── .env                       # Local config (gitignored)
 ├── docs/
-│   ├── DEPLOYMENT.md    # RPi setup, systemd, auto-sync
-│   └── SCHEMA.md        # InfluxDB schema, Grafana queries
-├── CHANGELOG.md         # Version history
+│   ├── DEPLOYMENT.md          # RPi setup, systemd, auto-sync
+│   └── SCHEMA.md              # InfluxDB schema, Grafana queries
+├── CHANGELOG.md               # Version history
 └── scripts/
-    └── sync.sh          # GitHub auto-sync (created on Pi)
+    └── sync.sh                # GitHub auto-sync (created on Pi)
 ```
 
 ## Development Commands
@@ -79,9 +81,10 @@ When making changes, verify:
 
 ### Add New Sail Option
 
-1. Add to appropriate list: `MAIN_STATES`, `HEADSAILS`, or `DOWNWIND_SAILS`
-2. Add display name to `SAIL_DISPLAY` dict
-3. Update `docs/SCHEMA.md` if needed
+1. Edit `boat_config.toml`
+2. Add to appropriate list under `[sails.main]`, `[sails.headsail]`, or `[sails.downwind]`
+3. Add display name to `[display]` section
+4. Update `docs/SCHEMA.md` if needed
 
 ### Modify UI Styling
 
