@@ -1,6 +1,6 @@
 # Sail Plan Tracker
 
-[![Version](https://img.shields.io/badge/version-0.9.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.9.1-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/streamlit-1.28+-red.svg)](https://streamlit.io)

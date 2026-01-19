@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2025-01-18
+
+### Added
+- Boat configuration file (`boat_config.toml`) for customizable sail inventory
+- Live clock update in header (refreshes every 30 seconds)
+- Dynamic boat name in header from config
+
+### Changed
+- Sail selection buttons increased 50% in size for easier touch targets
+- History cache TTL reduced from 60s to 30s for better multi-device sync
+- Note field now clears after saving (notes are per-entry, not persistent)
+
+### Fixed
+- Current config cache now clears after deleting history entries
+- Header no longer shows hardcoded boat name
+
 ## [0.9.0] - 2025-01-17
 
 ### Added
@@ -65,7 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comment field for notes
 - Recent history view
 
-[Unreleased]: https://github.com/jrehm/sail-plan/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/jrehm/sail-plan/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/jrehm/sail-plan/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/jrehm/sail-plan/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/jrehm/sail-plan/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/jrehm/sail-plan/compare/v0.6.0...v0.7.0
