@@ -670,7 +670,8 @@ def mark_pending():
 def clear_pending():
     """Clear pending changes flag after successful save."""
     st.session_state.has_pending_changes = False
-    st.session_state.pending_comment = ""
+    # Note: pending_comment is cleared by the sync logic at page start
+    # when has_pending_changes is False (can't modify widget key after render)
 
 
 def format_config_summary(main: str, headsail: str, downwind: str, staysail_mode: bool) -> str:
