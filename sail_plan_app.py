@@ -778,12 +778,23 @@ config_summary = format_config_summary(
 st.markdown(f'''
 <div class="sticky-header">
     <div class="compact-header">
-        <span class="title">MORTICIA</span>
-        <span class="time">{current_time}</span>
+        <span class="title">{BOAT_NAME.upper()}</span>
+        <span class="time" id="header-clock">{current_time}</span>
     </div>
     <div class="state-banner">{config_summary}</div>
     {pending_html}
 </div>
+<script>
+    function updateClock() {{
+        const now = new Date();
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const clockEl = document.getElementById('header-clock');
+        if (clockEl) clockEl.textContent = hours + ':' + minutes;
+    }}
+    updateClock();
+    setInterval(updateClock, 30000);
+</script>
 ''', unsafe_allow_html=True)
 
 # ============ SAIL SELECTION (Fragment for fast updates) ============
