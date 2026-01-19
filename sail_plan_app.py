@@ -594,6 +594,14 @@ st.markdown("""
             padding: 1rem 1.6rem !important;
             font-size: 2.4rem !important;
         }
+        /* Stack status banner and UPDATE button on narrow screens */
+        [data-testid="stHorizontalBlock"]:first-of-type {
+            flex-wrap: wrap !important;
+        }
+        [data-testid="stHorizontalBlock"]:first-of-type > [data-testid="stColumn"] {
+            width: 100% !important;
+            flex: 1 1 100% !important;
+        }
     }
 
     /* Dark mode adjustments */
@@ -808,8 +816,8 @@ st.markdown(f'''
 </script>
 ''', unsafe_allow_html=True)
 
-# State banner and UPDATE button side by side
-col_status, col_update = st.columns([2, 1])
+# State banner and UPDATE button side by side (50/50 split)
+col_status, col_update = st.columns([1, 1], gap="small")
 with col_status:
     st.markdown(f'<div class="state-banner">{config_summary}</div>', unsafe_allow_html=True)
 with col_update:
