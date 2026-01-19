@@ -621,9 +621,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Get timezone
+# Get timezone and calculate offset for JavaScript
 boat_tz = get_boat_timezone()
-current_time = format_local_time(datetime.now(timezone.utc), boat_tz)
+now_utc = datetime.now(timezone.utc)
+current_time = format_local_time(now_utc, boat_tz)
+# Calculate timezone offset in minutes for JavaScript
+tz_offset_seconds = now_utc.astimezone(boat_tz).utcoffset().total_seconds()
+tz_offset_minutes = int(tz_offset_seconds // 60)
 
 # Always fetch current committed state from InfluxDB (ensures multi-user consistency)
 committed_config = get_current_sail_config()
@@ -786,8 +790,12 @@ st.markdown(f'''
 <script>
     function updateClock() {{
         const now = new Date();
-        const hours = String(now.getHours()).padStart(2, '0');
-        const minutes = String(now.getMinutes()).padStart(2, '0');
+        // Convert to boat timezone using offset from server
+        const boatOffsetMs = {tz_offset_minutes} * 60 * 1000;
+        const utcMs = now.getTime() + (now.getTimezoneOffset() * 60 * 1000);
+        const boatTime = new Date(utcMs + boatOffsetMs);
+        const hours = String(boatTime.getHours()).padStart(2, '0');
+        const minutes = String(boatTime.getMinutes()).padStart(2, '0');
         const clockEl = document.getElementById('header-clock');
         if (clockEl) clockEl.textContent = hours + ':' + minutes;
     }}
