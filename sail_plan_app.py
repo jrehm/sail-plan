@@ -641,6 +641,8 @@ if not st.session_state.has_pending_changes:
     st.session_state.headsail = committed_config["headsail"]
     st.session_state.downwind = committed_config["downwind"]
     st.session_state.staysail_mode = committed_config["staysail_mode"]
+    # Clear comment - notes are per-entry, not carried forward
+    st.session_state.pending_comment = ""
 
 
 def has_changes() -> bool:
@@ -864,13 +866,11 @@ popover_label = "NOTE ✓" if has_comment else "NOTE"
 with st.popover(popover_label, use_container_width=True):
     comment = st.text_area(
         "Add a note",
-        value=st.session_state.pending_comment,
+        key="pending_comment",
         height=60,
         placeholder="Conditions, reason for change...",
         label_visibility="collapsed"
     )
-    if comment != st.session_state.pending_comment:
-        st.session_state.pending_comment = comment
 
 # Backdate toggle (collapsible)
 use_backdate = st.checkbox("Backdate entry", key="use_backdate")
