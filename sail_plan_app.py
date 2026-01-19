@@ -264,7 +264,7 @@ def write_sail_config(
         return False
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def get_recent_entries(limit: int = 10) -> list[dict]:
     """
     Fetch recent sail log entries from the past 7 days.
